@@ -1,1 +1,46 @@
-<!doctype html><html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>WSPD BWG Manager</title></head><body><p style="font-family:system-ui;padding:20px">BWG Manager wird geladen …</p><script src="chunk0.js"></script><script src="chunk1.js"></script><script>(async()=>{try{const b64=(window.BWG_CHUNKS||[]).join("");const bin=atob(b64);const bytes=new Uint8Array(bin.length);for(let i=0;i<bin.length;i++)bytes[i]=bin.charCodeAt(i);const ds=new DecompressionStream("gzip");const out=await new Response(new Blob([bytes]).stream().pipeThrough(ds)).text();document.open();document.write(out);document.close();}catch(e){document.body.innerHTML="<h2>BWG Manager konnte nicht geladen werden.</h2><pre>"+String(e)+"</pre>";}})();</script></body></html>
+<!doctype html><html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>WSPD BWG Manager</title></head><body><p style="font-family:system-ui;padding:20px">BWG Manager wird geladen …</p><script src="chunk0.js"></script><script src="chunk1.js"></script><script>(async()=>{try{const b64=(window.BWG_CHUNKS||[]).join("");const bin=atob(b64);const bytes=new Uint8Array(bin.length);for(let i=0;i<bin.length;i++)bytes[i]=bin.charCodeAt(i);const ds=new DecompressionStream("gzip");let out=await new Response(new Blob([bytes]).stream().pipeThrough(ds)).text();
+
+const robustSave = `async function dbSaveBwg(record) {
+  if (!supabaseClient) {
+    const rows = loadLocal(); rows.unshift(record); saveLocal(rows); return record;
+  }
+  const payload = {
+    applicant: record.applicant,
+    examiner: record.examiner,
+    experience_type: record.experience_type,
+    score_percent: record.score_percent,
+    score_points: record.score_points,
+    max_points: record.max_points,
+    classification: record.classification,
+    passed: record.passed,
+    payload: record.payload
+  };
+
+  let lastError = null;
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    try {
+      const { error } = await supabaseClient.from("bwgs").insert(payload);
+      if (error) throw error;
+      return record;
+    } catch (err) {
+      lastError = err;
+      console.warn("BWG-Speichern Versuch " + attempt + "/3 fehlgeschlagen", err);
+      if (attempt < 3) await new Promise(resolve => setTimeout(resolve, attempt * 1000));
+    }
+  }
+
+  try {
+    const pendingKey = "wspd_bwg_pending_save_v1";
+    const pending = JSON.parse(localStorage.getItem(pendingKey) || "[]");
+    pending.unshift(record);
+    localStorage.setItem(pendingKey, JSON.stringify(pending));
+  } catch (_) {}
+
+  const msg = lastError && lastError.message ? lastError.message : String(lastError || "Unbekannter Netzwerkfehler");
+  throw new Error(msg + " – 3 Speicherversuche fehlgeschlagen. Das BWG wurde zusätzlich lokal auf diesem Gerät gesichert.");
+}
+
+`;
+out=out.replace(/async function dbSaveBwg\(record\) \{[\s\S]*?(?=async function dbDeleteBwg)/,robustSave);
+
+document.open();document.write(out);document.close();}catch(e){document.body.innerHTML="<h2>BWG Manager konnte nicht geladen werden.</h2><pre>"+String(e)+"</pre>";}})();</script></body></html>
